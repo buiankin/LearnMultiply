@@ -2,12 +2,14 @@ package ru.code22.learn_multiply;
 
 import android.annotation.SuppressLint;
 import android.content.ContentProvider;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.UriMatcher;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.util.Log;
 
@@ -23,6 +25,12 @@ public class LearnMultiplyContentProvider extends ContentProvider {
     // БД
     public static final String DB_NAME = "data.db";
     public static final int DB_VERSION = 1;
+
+    // Таблица
+    private static final String TESTS_TABLE = "tests";
+    private static final String QUESTIONS_TABLE = "questions";
+    private static final String ANSWERS_TABLE = "answers";
+    private static final String SEANCES_TABLE = "seances";
 
     // Uri
     // authority
@@ -132,8 +140,57 @@ public class LearnMultiplyContentProvider extends ContentProvider {
 
     @Nullable
     @Override
-    public Cursor query(@NonNull Uri uri, @Nullable String[] strings, @Nullable String s, @Nullable String[] strings1, @Nullable String s1) {
-        return null;
+    public Cursor query(@NonNull Uri uri, @Nullable String[] projection, @Nullable String selection, @Nullable String[] selectionArgs, @Nullable String sortOrder) {
+        SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
+        boolean bAppendIdToSelection=false;
+        String appendIdPreffix="";
+
+        switch (sUriMatcher.match(uri)) {
+            case URI_TESTS_ID:
+                bAppendIdToSelection = true;
+            case URI_TESTS:
+                qb.setTables(TESTS_TABLE);
+                qb.setProjectionMap(testsProjectionMap);
+                break;
+            case URI_QUESTIONS_ID:
+                bAppendIdToSelection = true;
+            case URI_QUESTIONS:
+                qb.setTables(QUESTIONS_TABLE);
+                qb.setProjectionMap(questionsProjectionMap);
+                break;
+            case URI_ANSWERS_ID:
+                bAppendIdToSelection = true;
+            case URI_ANSWERS:
+                qb.setTables(ANSWERS_TABLE);
+                qb.setProjectionMap(answersProjectionMap);
+                break;
+            case URI_SEANCES_ID:
+                bAppendIdToSelection = true;
+            case URI_SEANCES:
+                qb.setTables(SEANCES_TABLE);
+                qb.setProjectionMap(seancesProjectionMap);
+                break;
+
+
+            default:
+                throw new IllegalArgumentException("Unknown URI (for select) " + uri);
+        }
+
+        if (bAppendIdToSelection) {
+            if (selection==null||selection.isEmpty())
+                selection = appendIdPreffix+"_id = " + uri.getLastPathSegment();
+            else
+                selection = selection + " and "+appendIdPreffix+"_id = " + uri.getLastPathSegment();
+        }
+
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+
+        Cursor c = qb.query(db, projection, selection, selectionArgs, null, null, sortOrder);
+        // просим ContentResolver уведомлять этот курсор
+        // об изменениях данных в CONTACT_CONTENT_URI
+        c.setNotificationUri(getContext().getContentResolver(), uri);
+
+        return c;
     }
 
     @Nullable
@@ -144,8 +201,22 @@ public class LearnMultiplyContentProvider extends ContentProvider {
 
     @Nullable
     @Override
-    public Uri insert(@NonNull Uri uri, @Nullable ContentValues contentValues) {
-        return null;
+    public Uri insert(@NonNull Uri uri, @Nullable ContentValues values) {
+        switch (sUriMatcher.match(uri)) {
+            case URI_TESTS:
+            case URI_QUESTIONS:
+            case URI_ANSWERS:
+            case URI_SEANCES:{
+                SQLiteDatabase db = dbHelper.getWritableDatabase();
+                long rowID = db.insert(TESTS_TABLE, null, values);
+                Uri resultUri = ContentUris.withAppendedId(TESTS_CONTENT_URI, rowID);
+                // уведомляем ContentResolver, что данные по адресу resultUri изменились
+                getContext().getContentResolver().notifyChange(resultUri, null);
+                return resultUri;
+            }
+            default:
+                throw new IllegalArgumentException("Unknown URI (for insert) " + uri);
+        }
     }
 
     @Override
